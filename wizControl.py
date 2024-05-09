@@ -22,6 +22,14 @@ socketB.connect((LightB_IP, 38899))
 socketC = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 socketC.connect((CenterLight_IP, 38899))
 
+def clamp(value,minVal,maxVal):
+    v=value
+    if v<minVal:
+        v=minVal
+    if v>maxVal:
+        v=maxVal
+    return v
+
 def mapRange(value, leftMin, leftMax, rightMin, rightMax):
     leftSpan = leftMax - leftMin
     rightSpan = rightMax - rightMin
@@ -45,11 +53,7 @@ def setBrightness(bulb,b):
     socketA or socketA for bulb and from 10 to 100 for Brightness
     """
     #print("Setting Brightness to "+str(b))
-    if b<10:
-        b=10
-    if b>100:
-        b=100
-
+    b=clamp(b,10,100);
     cmd = """{"method":"setPilot","params":{"state":true,"dimming":"""+str(b)+"""}}"""
     bulb.sendall(bytes(cmd, "utf-8"))
     time.sleep(TIME_DELAY)
@@ -74,56 +78,84 @@ def markFinish():
     setTemperature(socketA,50)
     setTemperature(socketB,50)
 
-    for i in range(4):
+    for i in range(5):
         setBrightness(socketA,10)
         setBrightness(socketB,100)
+        setColor(socketC,100,0,100,100)
         time.sleep(0.5)
         setBrightness(socketA,100)
         setBrightness(socketB,10)
+        setColor(socketC,0,50,100,100)
         time.sleep(0.5)
 
     setBrightness(socketA,100)
     setBrightness(socketB,100)
+    setColor(socketC,100,0,100,100)
 
 def fastBlink(bri,temp):
-    origTemp_A,origBri_A=getState(socketA)
+    bri=clamp(bri,60,100)
+    temp=clamp(temp,0,100)
+    print("Fast Blink ",bri,temp)
+    #origTemp_A,origBri_A=getState(socketA)
     origTemp_B,origBri_B=getState(socketB)
-    setTemperature(socketA,temp)
+    origTemp_C=origTemp_B
+    origBri_C=origBri_B
+
+    #setTemperature(socketA,temp)
     setTemperature(socketB,temp)
+    #setTemperature(socketC,temp)
     for i in range(3):
-        setBrightness(socketA,0)
+        #setBrightness(socketA,0)
         setBrightness(socketB,0)
+        setBrightness(socketC,0)
+        #setColor(socketC,0,0,0,100)
         time.sleep(0.5)
-        setBrightness(socketA,bri)
+        #setBrightness(socketA,bri)
         setBrightness(socketB,bri)
+        #setBrightness(socketC,bri)
+        setColor(socketC,0,45,100,bri)
         time.sleep(0.5)
 
-    setTemperature(socketA,origTemp_A)
+    #setTemperature(socketA,origTemp_A)
     setTemperature(socketB,origTemp_B)
-    setBrightness(socketA,origBri_A)
+    setTemperature(socketC,origTemp_C)
+    #setBrightness(socketA,origBri_A)
     setBrightness(socketB,origBri_B)
+    setBrightness(socketC,origBri_C)
     
 def slowBlink(bri,temp):
+    bri=clamp(bri,60,100)
+    temp=clamp(temp,0,100)
+    print("Slow Blink ",bri,temp)
     origTemp_A,origBri_A=getState(socketA)
-    origTemp_B,origBri_B=getState(socketB)
+    #origTemp_B,origBri_B=getState(socketB)
+    origTemp_C=origTemp_A
+    origBri_C=origBri_A
 
     setTemperature(socketA,temp)
-    setTemperature(socketB,temp)
+    #setTemperature(socketB,temp)
+    #setTemperature(socketC,temp)
+    setColor(socketC,100,15,0,bri)
     for i in range(2):
         steps=10
         for j in range(steps):
             setBrightness(socketA,(1.0-j/steps)*bri)
-            setBrightness(socketB,(1.0-j/steps)*bri)
-            #time.sleep(0.1)
+            #setBrightness(socketB,(1.0-j/steps)*bri)
+            #setBrightness(socketC,(1.0-j/steps)*bri)
+            setColor(socketC,(1.0-j/steps)*100,(1.0-j/steps)*15,0,bri)
         for j in range(steps):
             setBrightness(socketA,j/steps*bri)
-            setBrightness(socketB,j/steps*bri)
+            #setBrightness(socketB,j/steps*bri)
+            #setBrightness(socketC,j/steps*bri)
+            setColor(socketC,j/steps*100,j/steps*15,0,bri)
             #time.sleep(0.1)
     
     setTemperature(socketA,origTemp_A)
-    setTemperature(socketB,origTemp_B)
+    #setTemperature(socketB,origTemp_B)
+    setTemperature(socketC,origTemp_C)
     setBrightness(socketA,origBri_A)
-    setBrightness(socketB,origBri_B)
+    #setBrightness(socketB,origBri_B)
+    setBrightness(socketC,origBri_C)
 
 def getState(bulb):
     empty_socket(bulb)
@@ -133,7 +165,10 @@ def getState(bulb):
     #print(data)
     res = json.loads(data)
     bri=res["result"]["dimming"]
-    temp=res["result"]["temp"]
+    try:
+        temp=res["result"]["temp"]
+    except:
+        temp=5000
     temp=mapRange(temp,MIN_TEMPERATURE,MAX_TEMPERATURE,0,100)
     return (temp,bri)
 
@@ -148,6 +183,8 @@ def empty_socket(sock):
 
 def setColor(bulb,r,g,b,bri):
      #from r,g,b from 0 to 100, and bri from 0 to 100
+    bri=clamp(bri,10,100);
+
     """
     socketA or socketA for bulb and from 0 to 100, 0 for Warm and 100 for Cool
     """
@@ -158,13 +195,15 @@ def setColor(bulb,r,g,b,bri):
 
 # setTemperature(socketC,0)
 # time.sleep(2)
-# setColor(socketC,100,100,100,50)
+#setColor(socketC,100,0,100,100)
 # time.sleep(2)
 # setColor(socketC,100,0,0,50)
 # time.sleep(2)
 # setColor(socketC,0,0,100,100)
 # time.sleep(2)
-setColor(socketC,100,00,100,100)
-time.sleep(2)
+# setColor(socketC,100,00,100,100)
+# time.sleep(2)
 #setTemperature(socketC,0)
 #markFinish()
+#slowBlink(50,50)
+#fastBlink(50,50)

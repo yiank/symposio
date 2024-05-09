@@ -25,10 +25,13 @@ from wizControl import *
 
 turnOn(socketA)
 turnOn(socketB)
+turnOn(socketC)
 setBrightness(socketA,100)
 setBrightness(socketB,100)
+setBrightness(socketC,100)
 setTemperature(socketA,100)
 setTemperature(socketB,100)
+setTemperature(socketC,100)
 
 dirname = os.path.dirname(__file__)
 
@@ -118,8 +121,10 @@ def startDinner(event):
     startTime=time.time()
     setBrightness(socketA,30)
     setBrightness(socketB,30)
+    setBrightness(socketC,30)
     setTemperature(socketA,0)
     setTemperature(socketB,0)
+    setTemperature(socketC,0)
     print("Starting Dinner")
 
 def printTime():
@@ -170,7 +175,7 @@ stream.start_stream()
 
 totalClasses=len(yamnet_classes)
 
-historyLen=int(120/audio_chunck_duartion) #Time length for calulating average values of symposio events
+historyLen=int(60/audio_chunck_duartion) #Time length for calulating average values of symposio events
 #eventsShortHistory=[[0]*historyLen for i in range(totalClasses)]
 #eventsAveragePercentage=[0]*totalClasses
 #eventsTotalHistory=[0]*totalClasses #
@@ -381,7 +386,7 @@ while True:
         #4 Joy        :Cool / Brightness
         #5 Loud       :Cool / Brightness
         #
-        if currentPreset=="Typical":
+        if currentPreset=="Typical" or currentPreset=="Single" or currentPreset=="Conversation" or currentPreset=="Eating":
             bri=mapRange(duration,0,maxDuration,10,60)#40-100
             warm=2*SE_CurrentPercentage[1]+4*SE_CurrentPercentage[2]#2*SE_CurrentPercentage[1]+2*SE_CurrentPercentage[2]
             cool=0.5*SE_CurrentPercentage[0]+2*SE_CurrentPercentage[4]+2*SE_CurrentPercentage[5]
@@ -403,28 +408,21 @@ while True:
             bri+=briPercent
             bri=clamp(bri,0,100)
             temp=clamp(temp,0,100)
-        elif currentPreset=="Conversation":
-            bri=mapRange(duration,0,maxDuration,10,60)#40-100
-            warm=2*SE_CurrentPercentage[1]+4*SE_CurrentPercentage[2]#2*SE_CurrentPercentage[1]+2*SE_CurrentPercentage[2]
-            cool=0.5*SE_CurrentPercentage[0]+2*SE_CurrentPercentage[4]+2*SE_CurrentPercentage[5]
-            temp=40*cool/(cool+warm)
-            dimFactor=SE_CurrentPercentage[1]+SE_CurrentPercentage[2]
-            briFactor=SE_CurrentPercentage[4]+SE_CurrentPercentage[5]
-            briPercent=20*briFactor/(dimFactor+briFactor)#30*briFactor/(dimFactor+briFactor)
-            bri+=briPercent
-            bri=clamp(bri,0,100)
-            temp=clamp(temp,0,100)
-        elif currentPreset=="Eating":
-            bri=mapRange(duration,0,maxDuration,10,60)#40-100
-            warm=2*SE_CurrentPercentage[1]+4*SE_CurrentPercentage[2]#2*SE_CurrentPercentage[1]+2*SE_CurrentPercentage[2]
-            cool=0.5*SE_CurrentPercentage[0]+2*SE_CurrentPercentage[4]+2*SE_CurrentPercentage[5]
-            temp=40*cool/(cool+warm)
-            dimFactor=SE_CurrentPercentage[1]+SE_CurrentPercentage[2]
-            briFactor=SE_CurrentPercentage[4]+SE_CurrentPercentage[5]
-            briPercent=20*briFactor/(dimFactor+briFactor)#30*briFactor/(dimFactor+briFactor)
-            bri+=briPercent
-            bri=clamp(bri,0,100)
-            temp=clamp(temp,0,100)
+        
+        speechMaxLimit=80
+        speechMinLimit=5
+        silenceMaxLimit=60
+        eatMinLimit=2
+        if currentPreset=="Conversation":
+            speechMaxLimit=90
+            speechMinLimit=30
+            silenceMaxLimit=40
+        if currentPreset=="Eating":
+            speechMaxLimit=60
+            speechMinLimit=3
+            silenceMaxLimit=60
+            eatMinLimit=3
+
         #PRESETS END----------------------------------------------
             
         kelvin= int(mapRange(temp,0,100,2700,6500))
@@ -437,23 +435,23 @@ while True:
         axLight.set_title("Temp=" +str(int(temp))+"% Bri="+str(int(bri))+" c="+lightColor)
 
         print ("Brightness",bri,"Temperature",temp)
-
         print(cnt,historyLen, cnt%historyLen)
+
         if cnt%historyLen==0:
             print("Checking...")
-            if SE_ShortHistoryPercentage[0]>80: #Speech
+            if SE_ShortHistoryPercentage[0]>speechMaxLimit: #Speech
                 print("slowBlink...#80% Too much Speech")
                 axLight.set_title("slowBlink...#80% Speech")
                 slowBlink(bri,temp-50)
-            elif SE_ShortHistoryPercentage[2]>60: #Silence
+            elif SE_ShortHistoryPercentage[2]>silenceMaxLimit and currentPreset!="Eating": #Silence
                 print("fastBlink...#60% Too much Silence")
                 axLight.set_title("fastBlink...#60% Silence")
                 fastBlink(bri,temp+50)
-            elif SE_ShortHistoryPercentage[1]<2: #Not Eating
+            elif SE_ShortHistoryPercentage[1]<eatMinLimit: #Not Eating
                 print("slowBlink...#Not Eating")
                 axLight.set_title("slowBlink...#Not Eating")
                 slowBlink(bri,temp-50)
-            elif SE_ShortHistoryPercentage[0]<5: #Not Speaking
+            elif SE_ShortHistoryPercentage[0]<speechMinLimit and currentPreset!="Eating": #Not Speaking
                 print("fastBlink...#Not Speaking")
                 axLight.set_title("fastBlink...#Not Speaking")
                 fastBlink(bri,temp+50)
@@ -462,12 +460,20 @@ while True:
             setBrightness(socketB,bri)
             setTemperature(socketA,temp)
             setTemperature(socketB,temp)
+            if duration<0.9*maxDuration:
+                setBrightness(socketC,bri)
+                setTemperature(socketC,temp)
+            else:
+                col=mapRange(duration,0,maxDuration,0,100)
+                print("Color=",col)
+                setColor(socketC,100,100-col,100,bri+col)
         
         fig.canvas.mpl_connect('close_event', close_window)
         fig.canvas.draw()
         fig.canvas.flush_events()
 
-        if duration>maxDuration:
+        if duration>=maxDuration-2*audio_chunck_duartion:
+            print("Finished!--------------------")
             markFinish()
             savePlots("")
             started=False
